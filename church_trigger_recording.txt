@@ -1,0 +1,1 @@
+Record,normalized_hour_strike_preamble.wav,0.6,+20

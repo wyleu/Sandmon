@@ -1,0 +1,17 @@
+[Unit]
+Description=SandbellsMonitor Clock
+After=multi-user.target
+
+[Service]
+Environment=PATH=/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin
+Environment=HOME=/root
+WorkingDirectory=/sbin
+ExecStart=/usr/bin/python ./sandmon.py
+
+#-- :0 vt3
+TimeoutStopSec=8
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
