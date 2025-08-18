@@ -1,0 +1,11 @@
+# Ignore logs and recordings
+logs/
+recordings/
+*.wav
+*.log
+# Keep configuration files but ignore temporary data
+latest_recording.txt
+recordings/last_file
+# Python cache
+__pycache__/
+*.pyc
