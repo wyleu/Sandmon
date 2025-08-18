@@ -24,5 +24,5 @@ With another one-wire sensor hanging out the side to measure clock room temperat
 
 
 
-![IMG_20250818_215544](https://github.com/user-attachments/assets/149abe78-82b4-4d2a-84f6-60d21665fb32)
 
+![sandmon](https://github.com/user-attachments/assets/5219c42d-5235-4970-b257-0634f629ef1f)
