@@ -36,6 +36,7 @@ CONFIG = {
     'last_file_path': os.path.join('recordings', 'last_file'),
     'recording_status_file': 'recording_status.txt',
     'csv_columns': ['File', 'Lat', 'Lon', 'Temp1', 'Temp2', 'Temp3', 'Temp4', 'Temp5', 'Status', 'Offset', 'TestOffset'],
+    'log_level': logging.INFO,
     'log_file': os.path.join('logs', f"{os.path.splitext(os.path.basename(__file__))[0]}.log"),
     'trigger_file': 'trigger_recording.txt',
     'trigger_check_interval': 5,
@@ -86,7 +87,7 @@ def setup_logging(log_file):
 
         # Configure logging
         logging.basicConfig(
-            level=logging.INFO,
+            level=CONFIG['log_level'],
             handlers=[
                 colored_file_handler,
                 plain_file_handler,
@@ -270,25 +271,47 @@ class GPS3ListenerThread(BaseThread):
         self.initialize_gps()
         self.start_hourly_timer()
 
+
+    def initialize_gps(self):
+        try:
+            self.agps_thread = AGPS3mechanism()
+            self.agps_thread.stream_data(host='localhost', port=2947)
+            self.agps_thread.run_thread()
+            logger.info("GPS3 threaded listener started on localhost:2947")
+            time.sleep(1)  # Wait for initial data
+            lat = getattr(self.agps_thread.data_stream, 'lat', 'n/a')
+            lon = getattr(self.agps_thread.data_stream, 'lon', 'n/a')
+            logger.info(f"Initial GPS data: lat={lat}, lon={lon}")
+            if lat == 'n/a' or lon == 'n/a':
+                logger.warning(f"Penalized for 'n/a' values, using defaults: {CONFIG['default_lat']}, {CONFIG['default_lon']}")
+        except Exception as e:
+            logger.error(f"Error initializing GPS: {e} Line: {e.__traceback__.tb_lineno}")
+      
+
     def _check_trigger_file(self):
         """Check and process the trigger file to initiate a recording."""
         try:
             if not self._check_trigger_file_exists():
+                logger.debug("Trigger file does not exist")
                 return
 
             content = self._read_trigger_file_content()
+            logger.debug(f"Read trigger file content: '{content}'")
             if not self._validate_trigger_content(content):
                 return
 
             mtime = self._check_trigger_mtime()
+            logger.debug(f"Trigger file mtime: {mtime}, last_trigger_mtime: {self.last_trigger_mtime}")
             if mtime is None:
+                logger.debug("mtime validation failed, trigger ignored")
                 return
 
             self.last_trigger_content = content
             self.last_trigger_mtime = mtime
 
             test_mode = self._parse_test_mode_parameters(content)
-            if test_mode is False:  # Validation failed
+            if test_mode is False:
+                logger.debug(f"Test mode parameters invalid for content: '{content}'")
                 return
 
             message = self._build_trigger_message(test_mode)
@@ -315,11 +338,12 @@ class GPS3ListenerThread(BaseThread):
 
     def _validate_trigger_content(self, content):
         """Validate that the trigger file content is valid and changed."""
+        content = content.strip()
         if not content.lower().startswith("record"):
             logger.debug(f"Trigger file content '{content}' does not start with 'Record', ignoring")
             return False
         if content == self.last_trigger_content:
-            logger.debug("Trigger file content unchanged, ignoring")
+            logger.debug(f"Trigger file content '{content}' unchanged from '{self.last_trigger_content}', ignoring")
             return False
         return True
 
@@ -327,7 +351,9 @@ class GPS3ListenerThread(BaseThread):
         """Check if the trigger file's modification time allows a new trigger."""
         try:
             mtime = os.path.getmtime(CONFIG['trigger_file'])
+            logger.debug(f"Checking mtime: current={mtime}, last={self.last_trigger_mtime}")
             if not self._is_trigger_allowed(mtime):
+                logger.debug(f"Trigger mtime {mtime} not newer than last_trigger_mtime {self.last_trigger_mtime}, ignoring")
                 return None
             return mtime
         except Exception as e:
@@ -337,11 +363,12 @@ class GPS3ListenerThread(BaseThread):
     def _parse_test_mode_parameters(self, content):
         """Parse and validate test mode parameters from the trigger file content."""
         parts = content.split(',')
-        if len(parts) == 1:  # No test mode parameters
+        if len(parts) == 1:
+            logger.debug("No test mode parameters provided")
             return None
 
         if len(parts) != 4:
-            logger.error(f"Invalid trigger file format: {content}, expected 'Record' or 'Record,template_file,percentage,offset'")
+            logger.error(f"Invalid trigger file format: {content}, expected 'Record,template_file,percentage,offset'")
             return False
 
         try:
@@ -370,8 +397,9 @@ class GPS3ListenerThread(BaseThread):
             logger.info(f"Test mode parameters: template={template_file}, percentage={percentage}, offset={offset}")
             return test_mode
         except ValueError as e:
-            logger.error(f"Error parsing test mode parameters: {e}")
+            logger.error(f"Error parsing test mode parameters: {e} for content: {content}")
             return False
+
 
     def _build_trigger_message(self, test_mode):
         """Build the TRIGGER_RECORDING message with optional test_mode data."""
@@ -403,30 +431,16 @@ class GPS3ListenerThread(BaseThread):
         logger.info(f"Trigger file detected, sent TRIGGER_RECORDING: {message}, queue size: {self.shared_queue.qsize()}")
 
     def _clear_trigger_file(self):
-        """Clear the trigger file content."""
+        """Clear the trigger file content and reset last_trigger_content."""
         try:
             with file_lock:
                 with open(CONFIG['trigger_file'], 'w') as f:
                     f.write('')
-                logger.debug("Cleared trigger file content")
+                self.last_trigger_content = ''
+                logger.debug("Cleared trigger file content and reset last_trigger_content")
         except Exception as e:
-            logger.error(f"Error clearing trigger file: {e} Line: {e.__traceback__.tb_lineno}") 
-           
-    def initialize_gps(self):
-        try:
-            self.agps_thread = AGPS3mechanism()
-            self.agps_thread.stream_data(host='localhost', port=2947)
-            self.agps_thread.run_thread()
-            logger.info("GPS3 threaded listener started on localhost:2947")
-            time.sleep(1)  # Wait for initial data
-            lat = getattr(self.agps_thread.data_stream, 'lat', 'n/a')
-            lon = getattr(self.agps_thread.data_stream, 'lon', 'n/a')
-            logger.info(f"Initial GPS data: lat={lat}, lon={lon}")
-            if lat == 'n/a' or lon == 'n/a':
-                logger.warning(f"Penalized for 'n/a' values, using defaults: {CONFIG['default_lat']}, {CONFIG['default_lon']}")
-        except Exception as e:
-            logger.error(f"Error initializing GPS: {e} Line: {e.__traceback__.tb_lineno}")
-      
+            logger.error(f"Error clearing trigger file: {e} Line: {e.__traceback__.tb_lineno}")
+
     def start_hourly_timer(self):
         try:
             now = datetime.datetime.now()
@@ -462,8 +476,14 @@ class GPS3ListenerThread(BaseThread):
         """Cleanup resources for GPS3ListenerThread."""
         if self.timer:
             self.timer.cancel()
+            logger.debug("Canceled GPS timer")
         if self.agps_thread:
-            self.agps_thread.stop()
+            try:
+                self.agps_thread.stop()
+                self.agps_thread = None
+                logger.debug("Stopped AGPS3mechanism")
+            except Exception as e:
+                logger.error(f"Error stopping AGPS3mechanism: {e} Line: {e.__traceback__.tb_lineno}")
         logger.info("GPS3Listener cleanup completed")
 
     def send_hourly_trigger(self):
@@ -1104,7 +1124,11 @@ class ProcessingThread(BaseThread):
 
     def cleanup(self):
         """Cleanup resources for ProcessingThread."""
-        self.executor.shutdown(wait=False)
+        try:
+            self.executor.shutdown(wait=True, cancel_futures=True)
+            logger.debug("ThreadPoolExecutor shutdown with cancel_futures=True")
+        except Exception as e:
+            logger.error(f"Error shutting down executor: {e} Line: {e.__traceback__.tb_lineno}")
         logger.info("ProcessingThread cleanup completed")
 
     def process_file(self, output_file, last_file_path, test_mode=None):
@@ -1228,22 +1252,24 @@ def main():
                 thread.thread.join()
         except KeyboardInterrupt:
             logger.info("Received KeyboardInterrupt, stopping all threads")
-            threads[1].update_status_file("Shutting Down")
-            for thread in threads:
-                thread.stop()
-            for thread in threads:
-                thread.thread.join()
+            if 'threads' in locals():
+                threads[1].update_status_file("Shutting Down")
+                for thread in threads:
+                    thread.stop()
+                for thread in threads:
+                    try:
+                        thread.thread.join(timeout=5.0)
+                        if thread.thread.is_alive():
+                            logger.warning(f"Thread {thread.name} did not terminate within 5 seconds")
+                    except Exception as e:
+                        logger.error(f"Error joining {thread.name}: {e} Line: {e.__traceback__.tb_lineno}")
             logger.info("All threads stopped")
-            exit
-        except Exception as e:
-            logger.error(f"Unexpected error in main loop: {e} Line: {e.__traceback__.tb_lineno}")
-            threads[1].update_status_file("Shutting Down")
-            raise
-            
+            exit(0)
     except Exception as e:
         logger.error(f"Error in main: {e} Line: {e.__traceback__.tb_lineno}")
-        threads[1].update_status_file("Shutting Down")
-        raise
+        if 'threads' in locals():
+            threads[1].update_status_file("Shutting Down")
+        exit(1)
 
 if __name__ == "__main__":
     main()

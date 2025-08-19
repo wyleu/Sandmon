@@ -28,7 +28,7 @@ device = 0
 CONFIG = {
     'recording_status_file': 'recording_status.txt',
     'latest_recording_file': 'latest_recording.txt',
-    'log_file': os.path.join('logs', 'pilfile10.log'),
+    'log_file': os.path.join('logs', f"{os.path.splitext(os.path.basename(__file__))[0]}.log"),
     'font1_path': 'Font/Font01.ttf',
     'font2_path': 'Font/Font02.ttf',
     'status_colors': {
@@ -124,7 +124,7 @@ Font1_default, Font2_default = check_fonts()
 Font1 = Font1_default or ImageFont.truetype(CONFIG['font1_path'], 25)
 Font2 = Font1_default or ImageFont.truetype(CONFIG['font1_path'], 18)
 Font3 = Font2_default or ImageFont.truetype(CONFIG['font2_path'], 40)
-Font4 = Font1_default or ImageFont.truetype(CONFIG['font1_path'], 15)
+Font4 = Font1_default or ImageFont.truetype(CONFIG['font1_path'], 20)
 
 # Initialize LCD display
 try:
@@ -167,8 +167,8 @@ def clock(data=None, status="Idle"):
     im = Image.new('RGB', (240, 240), color=background_color)
     draw = ImageDraw.Draw(im)
 
-    draw.line((0, 0) + im.size, fill=128)
-    draw.line((0, im.size[1], im.size[0], 0), fill=128)
+    #draw.line((0, 0) + im.size, fill=128)
+    #draw.line((0, im.size[1], im.size[0], 0), fill=128)
     draw.arc((1, 1, 239, 239), 0, 360, fill=(0, 0, 255))
     draw.arc((2, 2, 238, 238), 0, 360, fill=(0, 0, 255))
     draw.arc((3, 3, 237, 237), 0, 360, fill=(0, 0, 255))
@@ -245,7 +245,7 @@ def clock(data=None, status="Idle"):
         font=Font3
     )
 
-    im = im.rotate(180)
+    # im = im.rotate(180)
     return im
 
 class FileChangeHandler(FileSystemEventHandler):
@@ -285,11 +285,32 @@ def update_display():
         last_data = new_data
         current_image = clock(last_data, last_status)
         try:
+            # Ensure the RAM disk directory exists
+            ramdisk_path = '/tmp/ramdisk'
+            if not os.path.exists(ramdisk_path):
+                os.makedirs(ramdisk_path)
+                logger.info(f"Created RAM disk directory: {ramdisk_path}")
+
+            # Capture pre-save time
+            pre_save_time = time.time()
+            
+            # Save the image to the RAM disk
+            image_path = os.path.join(ramdisk_path, 'clock_face.png')
+            current_image.save(image_path)
+            logger.debug(f"Saved clock image to {image_path}")
+            
+            # Capture post-save time and calculate difference in milliseconds
+            post_save_time = time.time()
+            time_diff_ms = (post_save_time - pre_save_time) * 1000
+            logger.debug(f"Time difference for saving clock_face.png: {time_diff_ms:.2f} ms")   # 37mS
+            
+            current_image = current_image.rotate(180)
+            
             disp.ShowImage(current_image)
             if status_changed or data_changed:
                 logger.info(f"Display updated to {new_status}")
         except Exception as e:
-            logger.error(f"Error displaying image: {e}")
+            logger.error(f"Error processing image: {e}")
 
 def main():
     default_files = [
