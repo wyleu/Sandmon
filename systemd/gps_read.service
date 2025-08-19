@@ -1,0 +1,18 @@
+[Unit]
+Description=Sandbells Monitor GPS Clock
+After=multi-user.target
+
+[Service]
+User=sandbells
+Environment=PATH=/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin
+Environment=HOME=/home/sandbells
+WorkingDirectory=/home/sandbells
+ExecStart=/home/sandbells/gps_read.sh
+
+#-- :0 vt3
+TimeoutStopSec=8
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

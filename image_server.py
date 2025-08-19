@@ -6,7 +6,7 @@ from time import strftime, localtime
 
 # Configuration
 PORT = 8000
-IMAGE_PATH = '/tmp/ramdisk/clock_face.png'
+IMAGE_PATH = '/tmp/Ramdisk/clock_face.png'
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">

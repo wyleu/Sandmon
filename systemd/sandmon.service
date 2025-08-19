@@ -1,12 +1,13 @@
 [Unit]
-Description=SandbellsMonitor Clock
+Description=Sandbells Monitor GPS Clock
 After=multi-user.target
 
 [Service]
+User=sandbells
 Environment=PATH=/usr/local/bin:/bin:/usr/bin:/sbin:/usr/sbin
-Environment=HOME=/root
-WorkingDirectory=/sbin
-ExecStart=/usr/bin/python ./sandmon.py
+Environment=HOME=/home/sandbells
+WorkingDirectory=/home/sandbells
+ExecStart=/home/sandbells/sandmon.sh
 
 #-- :0 vt3
 TimeoutStopSec=8
