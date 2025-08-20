@@ -28,6 +28,7 @@ bus = 0
 device = 0
 
 # Configuration
+# Configuration
 CONFIG = {
     'recording_status_file': 'recording_status.txt',
     'latest_recording_file': 'latest_recording.txt',
@@ -35,9 +36,18 @@ CONFIG = {
     'font1_path': 'Font/Font01.ttf',
     'font2_path': 'Font/Font02.ttf',
     'use_test_data': True,
-    'display_mode': 'text',  # Default to text mode
-    'default_background_color': (230, 230, 230),  # Very light grey
-    'clock_text_color': (0, 0, 0),  # Black for HH:MM:SS and lat/lon/temps
+    'display_mode': 'dark',  # Options: 'text', 'dark', or other (status-based)
+    'Double_buffer': False,  # Use stored clock image if True
+    'default_background_color': {
+        'text': (230, 230, 230),  # Very light grey for text mode
+        'dark': (0, 0, 0),        # Black for dark mode
+        'default': (230, 230, 230)  # Fallback
+    },
+    'clock_text_color': {
+        'text': (0, 0, 0),        # Black for text mode
+        'dark': (255, 255, 255),  # White for dark mode
+        'default': (0, 0, 0)      # Fallback
+    },
     'status_colors': {
         'Initial': {'background': (170, 170, 170), 'text': (0, 0, 0)},
         'Idle': {'background': (20, 20, 20), 'text': (255, 255, 255)},
@@ -52,7 +62,6 @@ CONFIG = {
     'clock_radius': 112,
     'clock_angle': 0
 }
-
 # Ramdisk paths
 background_ramdisk_path = "/tmp/Ramdisk/ring_test.png"
 clock_ramdisk_path = "/tmp/Ramdisk/clock_face.png"
@@ -89,7 +98,7 @@ def setup_logging(log_file):
         logger.info(f"Logging initialized, writing to {log_file}")
         return logger
     except Exception as e:
-        print(f"Failed to initialize logging: {e}")
+        print(f"Failed to initialize logging: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}")
         raise
 
 logger = setup_logging(CONFIG['log_file'])
@@ -105,7 +114,7 @@ def check_fonts():
             logger.warning("Falling back to default PIL font")
             return default_font, default_font
         except Exception as e:
-            logger.critical(f"Cannot load default font: {e}. Exiting.")
+            logger.critical(f"Cannot load default font: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}. Exiting.")
             sys.exit(1)
     return None, None
 
@@ -124,7 +133,7 @@ def initialize_display():
         disp.bl_DutyCycle(50)
         return disp
     except IOError as e:
-        logger.error(f"IOError initializing LCD: {e}")
+        logger.error(f"IOError initializing LCD: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}")
         sys.exit(1)
 
 disp = initialize_display()
@@ -157,7 +166,7 @@ def read_csv_data(csv_file, today):
                     if today - timedelta(days=7) <= row_date <= today - timedelta(days=1):
                         existing_data.append([float(row["accuracy_seconds"]), float(row["time_hours"]), row_date])
                 except (ValueError, KeyError) as e:
-                    logger.warning(f"Invalid row in {csv_file}: {e}")
+                    logger.warning(f"Invalid row in {csv_file}: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}")
         logger.info(f"Read {len(existing_data)} points from {csv_file}")
     except FileNotFoundError:
         logger.warning(f"{csv_file} not found")
@@ -258,9 +267,24 @@ def save_background_image(image, path):
 
 def generate_background(status="Initial"):
     """Generate the background image with data points."""
-    bg_color = CONFIG['default_background_color'] if CONFIG['display_mode'] == 'text' else \
-               CONFIG['status_colors'].get(status, CONFIG['status_colors']['Idle'])['background']
-    logger.debug(f"Generating background with color {bg_color} for status {status} in {CONFIG['display_mode']} mode")
+    # Validate display_mode
+    valid_modes = ['text', 'dark']
+    display_mode = CONFIG.get('display_mode', 'text')
+    if display_mode not in valid_modes:
+        logger.warning(f"Invalid display_mode '{display_mode}', defaulting to 'text'")
+        display_mode = 'text'
+
+    # Select background color
+    bg_color = CONFIG['default_background_color'].get(display_mode, (230, 230, 230))
+    if display_mode not in valid_modes:
+        bg_color = CONFIG['status_colors'].get(status, CONFIG['status_colors']['Idle'])['background']
+
+    # Validate bg_color
+    if not isinstance(bg_color, tuple) or len(bg_color) != 3 or not all(isinstance(c, int) and 0 <= c <= 255 for c in bg_color):
+        logger.error(f"Invalid bg_color {bg_color}, defaulting to (230, 230, 230)")
+        bg_color = (230, 230, 230)
+
+    logger.debug(f"Generating background with color {bg_color} for status {status} in {display_mode} mode")
     
     image = create_background_image(bg_color)
     data = load_or_generate_data()
@@ -277,24 +301,26 @@ def load_background_image(status):
         return generate_background(status)
 
 def draw_clock_arcs(draw, center, radius):
-    """Draw the blue arcs of the clock face."""
+    """Draw the red arcs of the clock face."""
     draw.arc((center[0] - radius, center[1] - radius, center[0] + radius, center[1] + radius), 
-             0, 360, fill=(0, 0, 255))
+             0, 360, fill=(255, 0, 0))
     draw.arc((center[0] - radius + 1, center[1] - radius + 1, center[0] + radius - 1, center[1] + radius - 1), 
-             0, 360, fill=(0, 0, 255))
+             0, 360, fill=(255, 0, 0))
     draw.arc((center[0] - radius + 2, center[1] - radius + 2, center[0] + radius - 2, center[1] + radius - 2), 
-             0, 360, fill=(0, 0, 255))
+             0, 360, fill=(255, 0, 0))
 
 def draw_clock_radial_lines(draw, center, radius):
-    """Draw the green radial lines of the clock face."""
+    """Draw the radial lines of the clock face (quarter-hour ticks)."""
+    # Use white for dark mode, green for other modes
+    line_color = (255, 255, 255) if CONFIG['display_mode'] == 'dark' else (128, 255, 128)
     draw.line([(center[0], center[1] - radius), (center[0], center[1] - radius + 11)], 
-              fill=(128, 255, 128), width=4)
+              fill=line_color, width=4)
     draw.line([(center[0], center[1] + radius), (center[0], center[1] + radius - 11)], 
-              fill=(128, 255, 128), width=4)
+              fill=line_color, width=4)
     draw.line([(center[0] - radius, center[1]), (center[0] - radius + 11, center[1])], 
-              fill=(128, 255, 128), width=4)
+              fill=line_color, width=4)
     draw.line([(center[0] + radius, center[1]), (center[0] + radius - 11, center[1])], 
-              fill=(128, 255, 128), width=4)
+              fill=line_color, width=4)
 
 def draw_clock_face(draw, center, radius):
     """Draw the complete clock face (arcs and radial lines)."""
@@ -308,10 +334,12 @@ def calculate_hand_endpoint(center, length, value, sections):
     return x, y
 
 def draw_main_hands(draw, center, hrs_values, min_values, sec_values):
-    """Draw the main clock hands in mid-grey."""
-    draw.line([(center[0], center[1]), hrs_values], fill=(128, 128, 128), width=5)
-    draw.line([(center[0], center[1]), min_values], fill=(128, 128, 128), width=4)
-    draw.line([(center[0], center[1]), sec_values], fill=(128, 128, 128), width=3)
+    """Draw the main clock hands in mid-grey or white for dark mode."""
+    # Use white for dark mode, mid-grey for other modes
+    hand_color = (255, 255, 255) if CONFIG['display_mode'] == 'dark' else (128, 128, 128)
+    draw.line([(center[0], center[1]), hrs_values], fill=hand_color, width=5)
+    draw.line([(center[0], center[1]), min_values], fill=hand_color, width=4)
+    draw.line([(center[0], center[1]), sec_values], fill=hand_color, width=3)
 
 def draw_small_hands(draw, sec_values, min_values, hrs_values, sec_angle, min_angle, hrs_angle):
     """Draw small red hands at the ends of main hands."""
@@ -338,9 +366,10 @@ def draw_clock_hands(draw, center, radius, time_struct):
     sec_value = float(time_struct.tm_sec)
     min_value = float(time_struct.tm_min)
     hrs_value = float(time_struct.tm_hour)
-    sec_length = int(0.63 * radius)
-    min_length = int(0.45 * radius)
-    hrs_length = int(0.27 * radius)
+    # Increase hand lengths by 10% for all modes
+    sec_length = int(0.63 * radius * 1.1)  # Increased from 0.63 to 0.693
+    min_length = int(0.45 * radius * 1.1)  # Increased from 0.45 to 0.495
+    hrs_length = int(0.27 * radius * 1.1)  # Increased from 0.27 to 0.297
 
     # Calculate main hand endpoints
     sec_values = calculate_hand_endpoint(center, sec_length, sec_value, 60)
@@ -358,13 +387,19 @@ def draw_clock_hands(draw, center, radius, time_struct):
 
 def draw_centered_text(draw, text, y_pos, font, fill_color):
     """Draw centered text at the specified y position."""
+    logger.debug(f"Draw CEnteredText  . {fill_color}")
     x_pos = 120 - draw.textlength(text, font) / 2
+    logger.debug(f"Draw CEnteredText  . {x_pos} {y_pos}  {fill_color} ")
+    
+    logger.debug(f' Type of fill color: {type(fill_color) }')
+    
     draw.text((x_pos, y_pos), text, fill=fill_color, font=font)
 
 def draw_time_text(draw, time_struct):
     """Draw the time text in HH:MM:SS format."""
     text = strftime("%H:%M:%S", time_struct)
-    draw_centered_text(draw, text, 50, Font3, CONFIG['clock_text_color'])
+    logger.debug(f"Drawing time text: '{text}' with color {CONFIG['clock_text_color'].get(CONFIG['display_mode'], (0, 0, 0))}")
+    draw_centered_text(draw, text, 50, Font3, CONFIG['clock_text_color'].get(CONFIG['display_mode'], (0, 0, 0)))
 
 def draw_status_box(draw, status, text_color):
     """Draw the status text in a colored box for non-Idle statuses in text mode."""
@@ -382,7 +417,7 @@ def draw_status_box(draw, status, text_color):
 
 def draw_status_info(draw, data, status, text_color):
     """Draw status-dependent text: status box or lat/lon/temps."""
-    if CONFIG['display_mode'] == 'text' and status != 'Idle':
+    if CONFIG['display_mode'] in ['text', 'dark'] and status != 'Idle':
         draw_status_box(draw, status, text_color)
     else:
         y_offset = 150
@@ -391,16 +426,16 @@ def draw_status_info(draw, data, status, text_color):
             valid_temps = [t for t in temps if t != 'None']
             if valid_temps:
                 temp_text = f"Temps: {', '.join(valid_temps)}°C"
-                draw_centered_text(draw, temp_text, y_offset, Font4, CONFIG['clock_text_color'])
+                draw_centered_text(draw, temp_text, y_offset, Font4, text_color)
                 y_offset += 20
             if 'Lat' in data and data['Lat'] != 'Lat: 00.0000000':
-                draw_centered_text(draw, f"Lat: {data['Lat']}", y_offset, Font4, CONFIG['clock_text_color'])
+                draw_centered_text(draw, f"Lat: {data['Lat']}", y_offset, Font4, text_color)
                 y_offset += 20
             if 'Lon' in data and data['Lon'] != 'Lon: 00.0000000':
-                draw_centered_text(draw, f"Lon: {data['Lon']}", y_offset, Font4, CONFIG['clock_text_color'])
+                draw_centered_text(draw, f"Lon: {data['Lon']}", y_offset, Font4, text_color)
                 y_offset += 20
             if 'Offset' in data and data['Offset']:
-                draw_centered_text(draw, f"Offset: {data['Offset']}", y_offset, Font4, CONFIG['clock_text_color'])
+                draw_centered_text(draw, f"Offset: {data['Offset']}", y_offset, Font4, text_color)
         logger.debug(f"Drew lat/lon/temps for status {status} in {CONFIG['display_mode']} mode")
 
 def create_transparent_image(bg_size):
@@ -419,26 +454,48 @@ def save_clock_image(image, path):
         post_save_time = time.time()
         logger.debug(f"Saved clock image to {path}, took {(post_save_time - pre_save_time) * 1000:.2f} ms")
     except Exception as e:
-        logger.error(f"Error saving clock image to {path}: {e}")
+        logger.error(f"Error saving clock image to {path}: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}")
 
 def draw_clock_elements(draw, center, radius, time_struct, data, status, text_color):
     """Draw all clock elements on the image, with hands last."""
     draw_clock_face(draw, center, radius)
+    logger.debug(f"Draw Clock Elements . {status}")
     draw_centered_text(draw, 'Sandbells', 20, Font2, (255, 0, 0))
+    logger.debug(f"Draw Clock Elements . {time_struct}")
     draw_time_text(draw, time_struct)
+    logger.debug(f"Draw Clock Elements . {status}")
     draw_status_info(draw, data, status, text_color)
+    logger.debug(f"Draw Clock Elements . {status}")
     draw_clock_hands(draw, center, radius, time_struct)  # Draw hands last to obscure text
 
 def clock(data=None, status="Idle"):
     """Generate the clock image, saving PNG one second ahead."""
+    # Validate display_mode
+    valid_modes = ['text', 'dark']
+    display_mode = CONFIG.get('display_mode', 'text')
+    if display_mode not in valid_modes:
+        logger.warning(f"Invalid display_mode '{display_mode}', defaulting to 'text'")
+        display_mode = 'text'
+    
     color_config = CONFIG['status_colors'].get(status, CONFIG['status_colors']['Idle'])
-    text_color = color_config['text']
+    # Use text_color based on display_mode
+    text_color = CONFIG['clock_text_color'].get(display_mode, (0, 0, 0))  # Direct fallback to tuple
+    if display_mode not in valid_modes:
+        text_color = color_config['text']
+    
+    # Validate text_color
+    if not isinstance(text_color, tuple) or len(text_color) != 3 or not all(isinstance(c, int) and 0 <= c <= 255 for c in text_color):
+        logger.error(f"Invalid text_color {text_color}, defaulting to (0, 0, 0)")
+        text_color = (0, 0, 0)
+    
+    logger.debug(f"Clock text_color set to {text_color} for display_mode {display_mode}")
+    
     center = CONFIG['clock_center']
     radius = CONFIG['clock_radius']
     current_time = localtime()
     advanced_time = localtime(mktime(current_time) + 1)
 
-    # Load background (very light grey in text mode)
+    # Load background
     bg_image = load_background_image(status)
 
     # LCD image (current time)
@@ -470,7 +527,7 @@ def read_recording_status(file_path):
         logger.error(f"File {file_path} not found, returning default")
         return {"Status": "Idle", "Lat": "0.0", "Lon": "0.0", "Temp1": "None", "Temp2": "None", "Temp3": "None", "Temp4": "None", "Temp5": "None", "Offset": ""}
     except Exception as e:
-        logger.error(f"Error reading recording status: {e}")
+        logger.error(f"Error reading recording status: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}")
         return {"Status": "Idle", "Lat": "0.0", "Lon": "0.0", "Temp1": "None", "Temp2": "None", "Temp3": "None", "Temp4": "None", "Temp5": "None", "Offset": ""}
 
 def check_background_update_needed(today):
@@ -496,13 +553,27 @@ def update_globals(current_time, new_data, new_status):
     last_status = new_status
 
 def display_image(image):
-    """Display the image on the LCD with rotation."""
+    """Display the image on the LCD with rotation, optionally using the stored clock image if Double_buffer is enabled."""
     try:
-        rotated_image = image.rotate(180)
+        if CONFIG['Double_buffer']:
+            try:
+                # Load the stored clock image
+                display_image = Image.open(clock_ramdisk_path).convert("RGB")
+                logger.info(f"Loaded clock image from {clock_ramdisk_path} for double buffering")
+            except FileNotFoundError:
+                logger.warning(f"Clock image {clock_ramdisk_path} not found, falling back to provided image")
+                display_image = image
+            except Exception as e:
+                logger.error(f"Error loading clock image {clock_ramdisk_path}: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}, falling back to provided image")
+                display_image = image
+        else:
+            display_image = image
+
+        rotated_image = display_image.rotate(180)
         disp.ShowImage(rotated_image)
         logger.info(f"Display updated to {last_status}")
     except Exception as e:
-        logger.error(f"Error displaying image: {e}")
+        logger.error(f"Error displaying image: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}")
 
 def update_display():
     """Update the LCD display with the current image."""
@@ -532,9 +603,15 @@ def update_display():
             update_globals(current_time, new_data, new_status)
             global current_image
             current_image = clock(last_data, last_status)
+            
+            # If Double_buffer is enabled, ensure the clock image exists
+            if CONFIG['Double_buffer'] and not os.path.exists(clock_ramdisk_path):
+                logger.warning(f"Clock image {clock_ramdisk_path} missing, generating new image")
+                current_image = clock(last_data, last_status)
+            
             display_image(current_image)
     except Exception as e:
-        logger.error(f"Error in update_display: {e}")
+        logger.error(f"Error in update_display: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}")
 
 def initialize_files(files_to_watch):
     """Initialize watched files if they don't exist."""
@@ -552,7 +629,7 @@ def initialize_files(files_to_watch):
                     })
                 logger.info(f"Created {file_to_watch}")
             except Exception as e:
-                logger.error(f"Error creating {file_to_watch}: {e}")
+                logger.error(f"Error creating {file_to_watch}: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}")
                 sys.exit(1)
 
 def initialize_display_state():
@@ -562,17 +639,43 @@ def initialize_display_state():
     last_data = {"Status": "Initial", "Lat": "0.0", "Lon": "0.0", "Temp1": "None", "Temp2": "None", "Temp3": "None", "Temp4": "None", "Temp5": "None", "Offset": ""}
     last_background_update = datetime.now().date()
     try:
+        logger.info(f"Initializing display with display_mode: {CONFIG['display_mode']}")
         generate_background(last_status)
+        logger.info(f"After generate_background: {last_status}")
         current_image = clock(last_data, last_status)
         ramdisk_dir = os.path.dirname(clock_ramdisk_path)
         if not os.path.exists(ramdisk_dir):
             os.makedirs(ramdisk_dir)
             logger.info(f"Created ramdisk directory: {ramdisk_dir}")
+        save_clock_image(current_image, clock_ramdisk_path)
         display_image(current_image)
         logger.info("Initial display updated")
     except Exception as e:
-        logger.error(f"Error displaying initial image: {e}")
+        logger.error(f"Error displaying initial image: {e}  Line: {e.__traceback__.tb_lineno}")
         sys.exit(1)
+        
+def display_image(image):
+    """Display the image on the LCD with rotation, optionally using the stored clock image if Double_buffer is enabled."""
+    try:
+        if CONFIG['Double_buffer']:
+            try:
+                # Load the stored clock image
+                display_image = Image.open(clock_ramdisk_path).convert("RGB")
+                logger.info(f"Loaded clock image from {clock_ramdisk_path} for double buffering")
+            except FileNotFoundError:
+                logger.warning(f"Clock image {clock_ramdisk_path} not found, falling back to provided image")
+                display_image = image
+            except Exception as e:
+                logger.error(f"Error loading clock image {clock_ramdisk_path}: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}, falling back to provided image")
+                display_image = image
+        else:
+            display_image = image
+
+        rotated_image = display_image.rotate(180)
+        disp.ShowImage(rotated_image)
+        logger.info(f"Display updated to {last_status}")
+    except Exception as e:
+        logger.error(f"Error displaying image: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}")
 
 def update_initial_status(default_files):
     """Update the display with the initial status from the status file."""
@@ -581,10 +684,12 @@ def update_initial_status(default_files):
     last_status = last_data.get('Status', 'Idle')
     try:
         current_image = clock(last_data, last_status)
+        # Ensure clock image is saved for double buffering
+        save_clock_image(current_image, clock_ramdisk_path)
         display_image(current_image)
         logger.info(f"Display updated to {last_status}")
     except Exception as e:
-        logger.error(f"Error displaying initial status image: {e}")
+        logger.error(f"Error displaying initial status image: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno} ")
         sys.exit(1)
 
 def setup_file_observer(files_to_watch):
@@ -607,7 +712,7 @@ def handle_shutdown():
         logger.info("Display updated to Shutting Down")
         time.sleep(1)
     except Exception as e:
-        logger.error(f"Error displaying shutting down image: {e}")
+        logger.error(f"Error displaying shutting down image: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}")
     disp.module_exit()
     logger.info("Quit")
 
@@ -632,7 +737,7 @@ def main():
         observer.stop()
         sys.exit(0)
     except Exception as e:
-        logger.error(f"Unexpected error in main loop: {e}")
+        logger.error(f"Unexpected error in main loop: {e}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}  Line: {e.__traceback__.tb_lineno}")
         handle_shutdown()
         observer.stop()
         sys.exit(1)
@@ -655,6 +760,10 @@ class FileChangeHandler(FileSystemEventHandler):
                 if new_status != last_status:
                     logger.info(f"Status changed to '{new_status}'")
                 last_status = new_status
+                # Ensure clock image is updated
+                global current_image
+                current_image = clock(last_data, last_status)
+                save_clock_image(current_image, clock_ramdisk_path)
                 update_display()
 
 if __name__ == "__main__":
