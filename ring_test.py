@@ -39,10 +39,9 @@ for day in range(8):
         idx = day * 20 + i
         offset, hour = data[idx]
         # Angle: ±60s = ±45°, max ±240s = ±180° around 90°
-        if abs(offset) <= 60:
-            angle_deg = 90 + (offset / 60) * 45
-        else:
-            angle_deg = 90 + (offset / 240) * 180
+        #if abs(offset) <= 60:
+        angle_deg = -90 + (offset / 60) * 45
+           
         angle_rad = math.radians(angle_deg)
         # Luminance: 128 (6 AM) to 255 (midnight)
         luminance = 255 - 63.5 * abs(math.sin(math.pi * hour / 12))
@@ -52,8 +51,9 @@ for day in range(8):
         # Plot point
         x = center[0] + radius * math.cos(angle_rad)
         y = center[1] + radius * math.sin(angle_rad)
-        draw.ellipse([x - 3, y - 3, x + 3, y + 3], fill=scaled_color)
+        draw.ellipse([x - 2, y - 2, x + 2, y + 2], fill=scaled_color)
 
 # Save and display
+# image = image.rotate(180)
 image.save("ring_test.png")
 image.show()
