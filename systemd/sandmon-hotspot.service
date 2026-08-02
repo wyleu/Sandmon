@@ -1,0 +1,12 @@
+[Unit]
+Description=Sandmon WiFi hotspot ensure (SSID Sandbells only)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/sandmon-hotspot-ensure.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

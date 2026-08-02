@@ -1,0 +1,8 @@
+{
+  "ssid": "Sandbells",
+  "psk": "CHANGE_ME",
+  "channel": 6,
+  "ap_connection": "Sandbells",
+  "ap_interface": "wlan0",
+  "hostname": "sandmon"
+}
