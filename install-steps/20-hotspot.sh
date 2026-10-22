@@ -31,6 +31,15 @@ echo "  installed $HELPER_DST"
 sudo install -m 644 "$UNIT_SRC" "$UNIT_DST"
 echo "  installed $UNIT_DST"
 
+# Fixed hotspot addresses (sandswing Pico -> 10.42.0.81)
+DNSMASQ_SRC="$REPO_DIR/dnsmasq-shared.d/sandswing.conf"
+DNSMASQ_DST=/etc/NetworkManager/dnsmasq-shared.d/sandswing.conf
+if [ -f "$DNSMASQ_SRC" ]; then
+  sudo install -d /etc/NetworkManager/dnsmasq-shared.d
+  sudo install -m 644 "$DNSMASQ_SRC" "$DNSMASQ_DST"
+  echo "  installed $DNSMASQ_DST"
+fi
+
 sudo systemctl daemon-reload
 sudo systemctl enable sandmon-hotspot.service
 sudo systemctl start sandmon-hotspot.service
