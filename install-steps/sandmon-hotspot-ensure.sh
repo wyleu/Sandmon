@@ -47,9 +47,10 @@ nmcli connection modify "$CON" \
   802-11-wireless.band bg \
   802-11-wireless.channel "$CHANNEL" \
   wifi-sec.key-mgmt wpa-psk \
-  wifi-sec.proto rsn \
-  wifi-sec.pairwise ccmp \
-  wifi-sec.group ccmp \
+  wifi-sec.proto "wpa rsn" \
+  wifi-sec.pairwise "tkip ccmp" \
+  wifi-sec.group tkip \
+  wifi-sec.pmf disable \
   wifi-sec.psk "$PSK" \
   ipv4.method shared \
   ipv6.method ignore \
